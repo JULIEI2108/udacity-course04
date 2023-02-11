@@ -7,13 +7,20 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "elasticsearch": "^15.4.1",
+    "get-stream": "^6.0.1",
+    "getstream": "^8.1.0",
+    "http-aws-es": "^6.0.0",
+    "jimp": "^0.22.4",
     "serverless": "^1.43.0",
-    "source-map-support": "^0.5.10"
+    "source-map-support": "^0.5.10",
+    "uuid": "^3.3.2"
   },
   "devDependencies": {
     "1.0.3": "^1.0.3",
     "1.1.0": "^1.0.0",
     "@types/aws-lambda": "^8.10.17",
+    "@types/elasticsearch": "5.0.32",
     "@types/node": "^10.12.18",
     "aws-sdk": "^2.1301.0",
     "serverless-aws-documentation": "^1.1.0",

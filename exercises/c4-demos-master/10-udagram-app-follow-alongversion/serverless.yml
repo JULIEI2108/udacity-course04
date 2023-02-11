@@ -18,8 +18,10 @@ provider:
     IMAGES_TABLE: images-${self:provider.stage}
     CONNECTIONS_TABLE: Connections-${self:provider.stage}
     IMAGE_ID_INDEX: ImageIdIndex
-    IMAGES_S3_BUCKET: serverless-udagram-images-bucket2023-${self:provider.stage}
+    IMAGES_S3_BUCKET: serverless-udagram-images-bucket2023-julie-${self:provider.stage}
     SIGNED_URL_EXPIRATION: 300
+    THUMBNAILS_S3_BUCKET: serverless-udagram-thumbnail-bucket2023-julie-${self:provider.stage}
+    AUTH_0_SECRET: JJENSAtgF53PtKTO85F8QMFYoYxKaPPA-3uDC0zuk6-OpB-VrgIDLh021MV7GUCp
 
   iamRoleStatements:
     - Effect: Allow
@@ -48,8 +50,31 @@ provider:
         - dynamodb:PutItem
         - dynamodb:DeleteItem
       Resource: arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.CONNECTIONS_TABLE}
+    - Effect: Allow
+      Action:
+        - es:DescribeElasticsearchDomain
+        - es:DescribeElasticsearchDomains
+        - es:DescribeElasticsearchDomainConfig
+        - es:ESHttpPost
+        - es:ESHttpGet
+        - es:ESHttpPut
+      Resource: arn:aws:es:us-east-1:008556789497:domain/images-search-dev/*
+    - Effect: Allow
+      Action:
+        - sns:Publish
+      Resource: !Ref ImagesTopic
+    - Effect: Allow
+      Action:
+        - s3:PutObject  
+      Resource: arn:aws:s3:::${self:provider.environment.THUMBNAILS_S3_BUCKET}/*
+
+
+
+
 
 custom:
+  topicName: imagesTopic-${self:provider.stage}
+  snsFunctionName: SendUploadNotifications-${self:provider.stage}
   documentation:
     api:
       info:
@@ -66,6 +91,10 @@ custom:
 
 
 functions:
+  Auth: 
+    handler: src/lambda/auth/auth0Authorizer.handler
+
+
   GetGroups:
     handler: src/lambda/http/getGroups.handler
     events:
@@ -80,6 +109,7 @@ functions:
       - http:
           method: post
           path: groups
+          authorizer: Auth
           cors: true
           request:
             # Schema that will be used to validate incoming requests
@@ -117,6 +147,7 @@ functions:
           method: post
           path: groups/{groupId}/images
           cors: true
+          authorizer: Auth
           request:
             # Schema that will be used to validate incoming requests
             schema:
@@ -128,12 +159,25 @@ functions:
             requestModels:
               'application/json': ImageRequest
 
+  ResizeImage:
+    handler: src/lambda/s3/resizeImage.handler
+    Events:
+      - sns:
+          arn: arn:aws:sns:us-east-1:008556789497:imagesTopic-dev
+          topicName: ${self:custom.topicName}       
+
+
   SendUploadNotifications:
     environment:
       STAGE: ${self:provider.stage}
       API_ID:
         Ref: WebsocketsApi
     handler: src/lambda/s3/sendNotifications.handler
+    # functionName: ${self:custom.snsFunctionName}
+    Events:
+      - sns:
+          arn: arn:aws:sns:us-east-1:008556789497:imagesTopic-dev
+          topicName: ${self:custom.topicName}       
 
   ConnectHandler:
     handler: src/lambda/websocket/connect.handler
@@ -152,6 +196,8 @@ functions:
 
 
   SyncWithElasticsearch:
+    environment:
+      ES_ENDPOINT: !GetAtt ImagesSearch.DomainEndpoint
     handler: src/lambda/dynamoDb/elasticSearchSync.handler
     events:
       - stream:
@@ -162,6 +208,17 @@ functions:
 
 resources:
   Resources:
+    GatewayResponseDefault4XX:
+      Type: 'AWS::ApiGateway::GatewayResponse'
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authrization'"
+          gatewayresponse.header.Access-Control-Allow-Medhods: "'GET,OPTIONS,POST'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: 'ApiGatewayRestApi'
+
     RequestBodyValidator:
       Type: AWS::ApiGateway::RequestValidator
       Properties:
@@ -223,15 +280,43 @@ resources:
             KeyType: HASH
         BillingMode: PAY_PER_REQUEST
         TableName: ${self:provider.environment.CONNECTIONS_TABLE}
-    
+
+
+    ImagesTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        DisplayName: Image bucket topic
+        TopicName: ${self:custom.topicName}
+        Subscription:
+          - Protocol: lambda
+            Endpoint:
+              Fn::Join: 
+              - ":"
+              - - "arn:aws:lambda"
+                - Ref: "AWS::Region"
+                - Ref: "AWS::AccountId"
+                - "function"
+                - "udagram-app-dev-SendUploadNotifications"
+          - Protocol: lambda
+            Endpoint:
+              Fn::Join: 
+              - ":"
+              - - "arn:aws:lambda"
+                - Ref: "AWS::Region"
+                - Ref: "AWS::AccountId"
+                - "function"
+                - "udagram-app-dev-ResizeImage"    
+
     AttachmentsBucket:
       Type: AWS::S3::Bucket
+      DependsOn: 
+        - SNSTopicPolicy
       Properties:
         BucketName: ${self:provider.environment.IMAGES_S3_BUCKET}
         NotificationConfiguration:
-          LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Function: !GetAtt SendUploadNotificationsLambdaFunction.Arn
+          TopicConfigurations:
+            - Topic: 'arn:aws:sns:us-east-1:008556789497:imagesTopic-dev'
+              Event: 's3:ObjectCreated:Put'
         CorsConfiguration:
           CorsRules:
             -
@@ -246,15 +331,6 @@ resources:
                 - DELETE
                 - HEAD
               MaxAge: 3000
-
-    SendUploadNotificationsPermission:
-      Type: AWS::Lambda::Permission
-      Properties:
-        FunctionName: !Ref SendUploadNotificationsLambdaFunction
-        Principal: s3.amazonaws.com
-        Action: lambda:InvokeFunction
-        SourceAccount: !Ref AWS::AccountId
-        SourceArn: arn:aws:s3:::${self:provider.environment.IMAGES_S3_BUCKET}
     
 
 
@@ -271,4 +347,83 @@ resources:
               Action: 's3:GetObject'
               Resource: 'arn:aws:s3:::${self:provider.environment.IMAGES_S3_BUCKET}/*'
         Bucket: !Ref AttachmentsBucket
+
+
+    ThumbnailBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:provider.environment.THUMBNAILS_S3_BUCKET}
+    
+
+    SendUploadNotificationsPermission:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName: udagram-app-dev-SendUploadNotifications
+        Principal: sns.amazonaws.com
+        Action: lambda:InvokeFunction
+        SourceAccount: !Ref AWS::AccountId
+        SourceArn: arn:aws:sns:us-east-1:008556789497:imagesTopic-dev
+
+
+    ResizeImageNotificationsPermission:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName: udagram-app-dev-ResizeImage
+        Principal: sns.amazonaws.com
+        Action: lambda:InvokeFunction
+        SourceAccount: !Ref AWS::AccountId
+        SourceArn: arn:aws:sns:us-east-1:008556789497:imagesTopic-dev
+
+
+    ImagesSearch:
+      Type: AWS::Elasticsearch::Domain
+      Properties:
+        ElasticsearchVersion: '6.3'
+        DomainName: images-search-${self:provider.stage}
+        ElasticsearchClusterConfig:
+          DedicatedMasterEnabled: false
+          InstanceCount: '1'
+          ZoneAwarenessEnabled: false
+          InstanceType: t2.small.elasticsearch
+        EBSOptions:
+          EBSEnabled: true
+          Iops: 0
+          VolumeSize: 10
+          VolumeType: 'gp2'
+        
+        AccessPolicies:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Principal:
+              AWS: "*"
+            Action: es:*
+            Resource:  arn:aws:es:us-east-1:008556789497:domain/images-search-dev/*
+            Condition:
+              IpAddress:
+                aws:SourceIp: 139.218.25.194/32
+    
+
+                      
+
+    SNSTopicPolicy:
+      Type: AWS::SNS::TopicPolicy
+      Properties:
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Principal:
+              AWS: '*'
+            Action: 
+            - sns:Publish
+            Resource:
+              !Ref ImagesTopic
+            Condition:
+              ArnLike:
+                aws:SourceArn: arn:aws:s3:::${self:provider.environment.IMAGES_S3_BUCKET}
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+        Topics: 
+          - !Ref ImagesTopic  
 
