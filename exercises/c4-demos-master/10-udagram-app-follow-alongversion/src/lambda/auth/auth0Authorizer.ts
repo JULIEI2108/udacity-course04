@@ -1,13 +1,19 @@
-import {  CustomAuthorizerEvent, CustomAuthorizerResult, CustomAuthorizerHandler } from "aws-lambda";
+import {  CustomAuthorizerEvent, CustomAuthorizerResult } from "aws-lambda";
 import 'source-map-support/register'
 import { verify } from 'jsonwebtoken'
 import {JwtToken} from '../../auth/JwtToken'
-const auth0Secret= process.env.AUTH_0_SECRET
+import * as middy from 'middy'
+import  { secretsManager}  from 'middy/middlewares'
+
+const secretId = process.env.AUTH_0_SECRET_ID
+const secretField = process.env.AUTH_0_SECRET_FIELD
 
 
-export const handler: CustomAuthorizerHandler = async (event: CustomAuthorizerEvent): Promise<CustomAuthorizerResult> =>{
+
+
+export const handler = middy(async (event: CustomAuthorizerEvent, context): Promise<CustomAuthorizerResult> =>{
     try {
-        const decodedToken = verifyToken(event.authorizationToken)
+        const decodedToken = verifyToken(event.authorizationToken, context.AUTH0_SECRET[secretField])
         console.log("User was authorized")
 
             return{
@@ -41,11 +47,11 @@ export const handler: CustomAuthorizerHandler = async (event: CustomAuthorizerEv
         }
     }
 }
+)
 
 
 
-
-function verifyToken (authHeader: string) : JwtToken{
+function verifyToken (authHeader: string, secret: string) : JwtToken{
     if (!authHeader)
         throw  new Error('No authorization header')
 
@@ -54,7 +60,40 @@ function verifyToken (authHeader: string) : JwtToken{
     const split = authHeader.split(" ")
     const token = split[1]
 
-    return verify(token, auth0Secret) as JwtToken
+    console.log('secret', secret)
+    console.log('token', token)
+
+    return verify(token, secret) as JwtToken
 
 
 }
+// access secretmanager with typescript
+// async function getSecret(){
+//     if (cachedSecret) return JSON.parse(cachedSecret)
+//         console.log('cachedSecret', cachedSecret)
+
+//     const data = await client.getSecretValue({
+//         SecretId: secretId,
+//         VersionStage: "AWSCURRENT"
+//     })
+//     .promise()
+//     cachedSecret = data.SecretString
+//         console.log('cachedSecret', cachedSecret)
+    
+//     return JSON.parse(cachedSecret)
+
+// }
+
+// use middy.middlewares to access secretsManager
+
+handler.use(
+    secretsManager({
+        throwOnFailedCall: true,
+        cacheExpiryInMillis: 60000,
+        secrets: {
+            AUTH0_SECRET: secretId
+        },
+        cache: true
+    }
+    )
+)

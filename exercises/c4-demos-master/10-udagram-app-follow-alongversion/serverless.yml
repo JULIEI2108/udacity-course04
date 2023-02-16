@@ -5,7 +5,8 @@ service:
 plugins:
   - serverless-webpack
   - serverless-aws-documentation
-
+  - serverless-offline
+  - serverless-dynamodb-local
 provider:
   name: aws
   runtime: nodejs12.x
@@ -21,7 +22,8 @@ provider:
     IMAGES_S3_BUCKET: serverless-udagram-images-bucket2023-julie-${self:provider.stage}
     SIGNED_URL_EXPIRATION: 300
     THUMBNAILS_S3_BUCKET: serverless-udagram-thumbnail-bucket2023-julie-${self:provider.stage}
-    AUTH_0_SECRET: JJENSAtgF53PtKTO85F8QMFYoYxKaPPA-3uDC0zuk6-OpB-VrgIDLh021MV7GUCp
+    AUTH_0_SECRET_ID: Auth0Secret_${self:provider.stage}
+    AUTH_0_SECRET_FIELD: auth0Secret
 
   iamRoleStatements:
     - Effect: Allow
@@ -67,7 +69,14 @@ provider:
       Action:
         - s3:PutObject  
       Resource: arn:aws:s3:::${self:provider.environment.THUMBNAILS_S3_BUCKET}/*
-
+    - Effect: Allow
+      Action:
+        - secretsmanager:GetSecretValue
+      Resource: !Ref Auth0Secret
+    - Effect: Allow
+      Action:
+        - kms:Decrypt
+      Resource: !GetAtt KMSKey.Arn
 
 
 
@@ -75,6 +84,19 @@ provider:
 custom:
   topicName: imagesTopic-${self:provider.stage}
   snsFunctionName: SendUploadNotifications-${self:provider.stage}
+  
+  serverless-offline:
+    # useChildProcesses: true
+    port: 3003
+
+  dynamodb:
+    stages: 
+      - dev
+    start:
+      port: 8000
+      inMemory: true
+      migrate: true
+      
   documentation:
     api:
       info:
@@ -427,3 +449,38 @@ resources:
         Topics: 
           - !Ref ImagesTopic  
 
+    KMSKey:
+      Type: AWS::KMS::Key
+      Properties:
+        Description: KMS key to encrypt Auth0 secret 
+        KeyPolicy:
+          Version: '2012-10-17'
+          Id: key-default-1
+          Statement: 
+            - Sid: Allow administration of the key
+              Effect: Allow
+              Principal:
+                AWS:
+                  Fn::Join:
+                  - ':'
+                  - - 'arn:aws:iam:'
+                    - Ref: AWS::AccountId
+                    - 'root'
+              Action:
+                - 'kms:*'
+              Resource: '*'
+
+    KMSKeyAlias:
+      Type: AWS::KMS::Alias
+      Properties:
+        AliasName: alias/auth0Key-${self:provider.stage}
+        TargetKeyId: !Ref KMSKey
+
+
+
+    Auth0Secret:  
+      Type: AWS::SecretsManager::Secret
+      Properties:
+        Name: ${self:provider.environment.AUTH_0_SECRET_ID}
+        Description: Auth0 secret
+        KmsKeyId: !Ref KMSKey
