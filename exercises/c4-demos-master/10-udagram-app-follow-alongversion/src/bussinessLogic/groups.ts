@@ -18,5 +18,6 @@ export async function createGroup(
         id: itemId,
         name:createGroupRequest.name,
         description: createGroupRequest.description
+
     })
 }

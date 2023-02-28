@@ -7,3 +7,5 @@ export interface TodoItem {
   done: boolean
   attachmentUrl?: string
 }
+// attachmentUrl?: string
+// wait for future development

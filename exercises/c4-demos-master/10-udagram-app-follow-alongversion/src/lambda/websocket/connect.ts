@@ -1,12 +1,14 @@
 import {APIGatewayProxyHandler, APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import 'source-map-support/register'
 import * as AWS from 'aws-sdk'
+const AWSXRay = require('aws-xray-sdk')
 
+const XAWS = AWSXRay.captureAWS(AWS)
 
 
 
 const connectionsTable = process.env.CONNECTIONS_TABLE
-const docClient= new AWS.DynamoDB.DocumentClient()
+const docClient= new XAWS.DynamoDB.DocumentClient()
 
 export const handler: APIGatewayProxyHandler = async (event:APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
     console.log("Websocket connect", event)

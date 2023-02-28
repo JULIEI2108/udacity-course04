@@ -4,6 +4,7 @@ import { CreateGroupRequest } from '../../requests/CreateGroupRequest'
 import { createGroup } from '../../bussinessLogic/groups'
 
 
+
 export const handler:APIGatewayProxyHandler = async (event:APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   console.log('Processing event: ', event)
 

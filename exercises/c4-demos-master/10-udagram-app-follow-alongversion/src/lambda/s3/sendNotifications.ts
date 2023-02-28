@@ -1,9 +1,11 @@
 import { SNSEvent, S3Event, SNSHandler } from "aws-lambda";
 import 'source-map-support/register'
 import * as AWS from 'aws-sdk'
+const AWSXRay = require('aws-xray-sdk')
 
+const XAWS = AWSXRay.captureAWS(AWS)
 const connectionsTable = process.env.CONNECTIONS_TABLE
-const docClient= new AWS.DynamoDB.DocumentClient()
+const docClient= new XAWS.DynamoDB.DocumentClient()
 const stage = process.env.STAGE
 const apiId = process.env.API_ID
 const connectionParams = {
@@ -22,7 +24,7 @@ export const handler: SNSHandler= async (event: SNSEvent) => {
     }
 }
 
-const apiGateway = new AWS.ApiGatewayManagementApi(connectionParams)
+const apiGateway = new XAWS.ApiGatewayManagementApi(connectionParams)
 async function processS3Event(s3event: S3Event){
     for (const record of s3event.Records) {
         const key = record.s3.object.key

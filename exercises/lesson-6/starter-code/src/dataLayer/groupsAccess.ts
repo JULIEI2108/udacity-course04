@@ -1,10 +1,13 @@
 import * as AWS  from 'aws-sdk'
-import * as AWSXRay from 'aws-xray-sdk'
+// import * as AWSXRay from 'aws-xray-sdk'
 import { DocumentClient } from 'aws-sdk/clients/dynamodb'
+
+const AWSXRay = require('aws-xray-sdk')
 
 const XAWS = AWSXRay.captureAWS(AWS)
 
 import { Group } from '../models/Group'
+// import { Request } from 'aws-sdk'
 
 export class GroupAccess {
 

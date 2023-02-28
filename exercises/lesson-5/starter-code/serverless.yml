@@ -3,14 +3,13 @@ service:
 
 plugins:
   - serverless-webpack
-  - serverless-reqvalidator-plugin
   - serverless-aws-documentation
 
 provider:
   name: aws
   runtime: nodejs12.x
 
-  stage: ${opt:stage, 'dev'}
+  stage: ${opt:stage, 'dev1'}
   region: ${opt:region, 'us-east-1'}
 
   environment:
