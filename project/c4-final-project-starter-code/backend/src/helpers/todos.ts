@@ -12,19 +12,21 @@ export async function getTodosForUser (userId): Promise<TodoItem[]> {
     return todosAccess.getTodosForUser(userId)
 }
 export async function createTodo(createTodoRequest: CreateTodoRequest, userId: string): Promise<any> {
-    const todoid = uuid.v4()
+    
     //create todoId, createAT and create todoItem
-    const todo = { todoId: todoid,
+        const d = new Date()
+        const todoid = uuid.v4()
+        const todo = { todoId: todoid,
         userId: userId,
-        createdAt: Date().toString(),
+        createdAt: d.toISOString(),
         name: createTodoRequest.name,
         dueDate: createTodoRequest.dueDate,
         done: false,
         attachmentUrl: ''
+       }
+        return await todosAccess.createTodo(todo)
     }
-    return await todosAccess.createTodo(todo)
     
-}
 
 export async function updateTodo(updateTodoRequest: UpdateTodoRequest, userId: string, todoId: string): Promise<void>{
     todosAccess.updateTodo(updateTodoRequest, userId, todoId)
