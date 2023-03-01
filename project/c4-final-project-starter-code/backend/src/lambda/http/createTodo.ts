@@ -12,14 +12,14 @@ export const handler = middy(
   async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
     console.log('Creating Todo', event)
     const newTodo: CreateTodoRequest = JSON.parse(event.body)
-    if (newTodo.name == ''){
-      logger.info('todoName must not be empty', newTodo)
-      return {
-        statusCode: 500,
-        body: 'invalid todoName'
-      }
-    }
-    else{
+    // if (newTodo.name == ''){
+    //   logger.info('todoName must not be empty', newTodo)
+    //   return {
+    //     statusCode: 500,
+    //     body: 'invalid todoName'
+    //   }
+    // }
+    // else{
       const userId: string = getUserId(event)
       const todo= await createTodo(newTodo, userId)
       logger.info('todo', todo)
@@ -30,7 +30,7 @@ export const handler = middy(
         item: todo})
       }
     }
-    }
+    // }
 )
 
 handler.use(
